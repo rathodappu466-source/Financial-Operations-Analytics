@@ -1,4 +1,4 @@
- >> Financial Operations Analytics
+>> Financial Operations Analytics
  
 >> Revenue Forecasting, Churn & Profitability Analysis using Machine Learning and Power BI
 
