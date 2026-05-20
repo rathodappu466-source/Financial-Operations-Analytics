@@ -1,0 +1,28 @@
+{
+    "appu@gmail.com": [
+        {
+            "date": "2026-05-20 19:47:01.855346",
+            "tenure": 12,
+            "monthly_charges": 70.0,
+            "total_charges": 1000.0,
+            "probability": 0.23,
+            "risk": "LOW RISK"
+        },
+        {
+            "date": "2026-05-20 19:55:32.368936",
+            "tenure": 27,
+            "monthly_charges": 70.0,
+            "total_charges": 1000.0,
+            "probability": 0.23,
+            "risk": "LOW RISK"
+        },
+        {
+            "date": "2026-05-20 19:55:56.311041",
+            "tenure": 32,
+            "monthly_charges": 200.0,
+            "total_charges": 1000.0,
+            "probability": 0.29,
+            "risk": "LOW RISK"
+        }
+    ]
+}
