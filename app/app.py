@@ -19,16 +19,28 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from database import PredictionHistory, SessionLocal, User 
-from database import get_all_users
-from database import delete_user
-from database import promote_to_admin
-from database import demote_to_user
-from database import get_total_users
-from database import get_total_predictions
-from database import get_high_risk_predictions
-from database import get_admin_count
+import sys
+import os
 
+sys.path.append(
+    os.path.dirname(
+        os.path.dirname(__file__)
+    )
+)
+
+from database import (
+    PredictionHistory,
+    SessionLocal,
+    User,
+    get_all_users,
+    delete_user,
+    promote_to_admin,
+    demote_to_user,
+    get_total_users,
+    get_total_predictions,
+    get_high_risk_predictions,
+    get_admin_count
+)
 
 # =====================================================
 # CONSTANTS
