@@ -19,7 +19,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from database import PredictionHistory, SessionLocal, User , engine
+from database import PredictionHistory, SessionLocal, User 
 from database import get_all_users
 from database import delete_user
 from database import promote_to_admin
