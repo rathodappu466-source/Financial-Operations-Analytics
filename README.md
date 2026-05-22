@@ -1,4 +1,6 @@
 >> Financial Operations Analytics
+>>
+>> App Link : https://financial-ai-intelligence.streamlit.app/ 
 
 An end-to-end analytics project for churn prediction, revenue forecasting, and profitability insight generation using Python, machine learning, and Power BI.
 
