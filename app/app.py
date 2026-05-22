@@ -1,19 +1,18 @@
 # =====================================================
 # IMPORTS
 # =====================================================
-from database import ActivityLog
-from database import save_activity_log
-from database import reset_user_password
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from html import escape
 from io import BytesIO
 from pathlib import Path
+
 import hashlib
 import hmac
 import os
 import re
 import secrets
+import sys
 
 import joblib
 import pandas as pd
@@ -21,8 +20,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-import sys
-import os
+# =====================================================
+# PROJECT ROOT PATH
+# =====================================================
 
 sys.path.append(
     os.path.dirname(
@@ -30,11 +30,14 @@ sys.path.append(
     )
 )
 
+# =====================================================
+# DATABASE IMPORTS
+# =====================================================
+
 from database import (
     PredictionHistory,
     SessionLocal,
     User,
-    ActivityLog,
     get_all_users,
     delete_user,
     promote_to_admin,
