@@ -7,3 +7,7 @@ sqlalchemy
 joblib
 openpyxl
 matplotlib
+reportlab
+pyotp
+qrcode
+Pillow

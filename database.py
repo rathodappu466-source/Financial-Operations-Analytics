@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import create_engine
 from sqlalchemy import Column
 from sqlalchemy import Integer
@@ -93,6 +95,26 @@ class PredictionHistory(Base):
     risk = Column(String)
 
     prediction_date = Column(String)
+
+# =====================================================
+# ACTIVITY LOGS TABLE
+# =====================================================
+
+class ActivityLog(Base):
+
+    __tablename__ = "activity_logs"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    username = Column(String)
+
+    action = Column(String)
+
+    timestamp = Column(String)
 
 # =====================================================
 # CREATE DATABASE TABLES
@@ -338,6 +360,81 @@ def get_admin_count():
         return db.query(User).filter(
             User.role_type == "Admin"
         ).count()
+
+    finally:
+
+        db.close()
+
+# =====================================================
+# SAVE ACTIVITY LOG
+# =====================================================
+
+def save_activity_log(
+    username,
+    action
+):
+
+    db = SessionLocal()
+
+    log = ActivityLog(
+
+        username=username,
+
+        action=action,
+
+        timestamp=str(datetime.now())
+
+    )
+
+    db.add(log)
+
+    db.commit()
+
+    db.close()
+
+# =====================================================
+# RESET PASSWORD
+# =====================================================
+
+def reset_user_password(username, new_password):
+
+    db = SessionLocal()
+
+    user = db.query(User).filter(
+        User.username == username
+    ).first()
+
+    if user:
+
+        user.password = new_password
+
+        db.commit()
+
+        db.close()
+
+        return True
+
+    db.close()
+
+    return False
+
+# =====================================================
+# GET ACTIVITY LOGS
+# =====================================================
+
+def get_activity_logs():
+
+    db = SessionLocal()
+
+    try:
+
+        logs = db.query(
+            ActivityLog
+        ).order_by(
+            ActivityLog.id.desc()
+        ).all()
+
+        return logs
 
     finally:
 

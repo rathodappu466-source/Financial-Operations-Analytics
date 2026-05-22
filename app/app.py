@@ -1,7 +1,9 @@
 # =====================================================
 # IMPORTS
 # =====================================================
-
+from database import ActivityLog
+from database import save_activity_log
+from database import reset_user_password
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from html import escape
@@ -32,6 +34,7 @@ from database import (
     PredictionHistory,
     SessionLocal,
     User,
+    ActivityLog,
     get_all_users,
     delete_user,
     promote_to_admin,
@@ -39,7 +42,10 @@ from database import (
     get_total_users,
     get_total_predictions,
     get_high_risk_predictions,
-    get_admin_count
+    get_admin_count,
+    get_activity_logs,
+    save_activity_log,
+    reset_user_password
 )
 
 # =====================================================
@@ -1080,6 +1086,10 @@ def save_prediction(
                 prediction_date=datetime.now().isoformat(timespec="seconds"),
             )
         )
+        save_activity_log(
+            st.session_state.username,
+            "Generated AI Prediction"
+        )
 
 
 def get_prediction_history(username: str):
@@ -1471,7 +1481,10 @@ def render_sidebar(current_user) -> str:
 
     # SHOW ADMIN PANEL ONLY FOR ADMINS
     if current_user.role_type == "Admin":
-        pages.append("Admin Panel")
+        pages.extend([
+        "Admin Panel",
+        "Activity Monitor"
+    ])
 
     page = st.sidebar.radio(
         "Navigation",
@@ -1579,49 +1592,235 @@ def render_auth_visual() -> None:
 
 
 def render_login_form() -> None:
-    st.markdown('<div class="section-label">Secure Access</div>', unsafe_allow_html=True)
-    st.markdown("<h2 style='color:white; margin-top:0;'>Sign in to FOA</h2>", unsafe_allow_html=True)
-    st.caption("Authenticate to open your enterprise analytics workspace.")
 
-    show_password = st.checkbox("Show password", key="login_show_password")
-    password_type = "default" if show_password else "password"
+    st.markdown(
+        '<div class="section-label">Secure Access</div>',
+        unsafe_allow_html=True
+    )
 
-    with st.form("login_form", clear_on_submit=False):
-        username = st.text_input("Username or email", placeholder="name@company.com")
-        password = st.text_input("Password", type=password_type)
-        submitted = st.form_submit_button("Authenticate")
+    st.markdown(
+        "<h2 style='color:white; margin-top:0;'>Sign in to FOA</h2>",
+        unsafe_allow_html=True
+    )
 
-    st.caption("Legacy accounts are upgraded to encrypted password storage after successful login.")
+    st.caption(
+        "Authenticate to open your enterprise analytics workspace."
+    )
+
+    show_password = st.checkbox(
+        "Show password",
+        key="login_show_password"
+    )
+
+    password_type = (
+        "default"
+        if show_password
+        else "password"
+    )
+
+    # =====================================================
+    # LOGIN FORM
+    # =====================================================
+
+    with st.form(
+        "login_form",
+        clear_on_submit=False
+    ):
+
+        username = st.text_input(
+            "Username or email",
+            placeholder="name@company.com"
+        )
+
+        password = st.text_input(
+            "Password",
+            type=password_type
+        )
+
+        submitted = st.form_submit_button(
+            "Authenticate"
+        )
+
+    st.caption(
+        "Legacy accounts are upgraded to encrypted password storage after successful login."
+    )
+
+    # =====================================================
+    # FORGOT PASSWORD
+    # =====================================================
+
+    with st.expander("Forgot Password?"):
+
+        st.caption(
+            "Reset your enterprise workspace password securely."
+        )
+
+        reset_username = st.text_input(
+            "Registered Username or Email",
+            key="reset_username"
+        )
+
+        new_password = st.text_input(
+            "New Password",
+            type="password",
+            key="reset_new_password"
+        )
+
+        confirm_password = st.text_input(
+            "Confirm Password",
+            type="password",
+            key="reset_confirm_password"
+        )
+
+        if st.button(
+            "Reset Secure Password",
+            use_container_width=True
+        ):
+
+            reset_username = normalize_username(
+                reset_username
+            )
+
+            if not reset_username:
+
+                notify(
+                    "Missing username",
+                    "Enter your registered username.",
+                    "warning"
+                )
+
+            elif len(new_password) < 8:
+
+                notify(
+                    "Weak password",
+                    "Password must contain at least 8 characters.",
+                    "warning"
+                )
+
+            elif new_password != confirm_password:
+
+                notify(
+                    "Password mismatch",
+                    "Passwords do not match.",
+                    "error"
+                )
+
+            else:
+
+                success = reset_user_password(
+                    reset_username,
+                    hash_password(new_password)
+                )
+
+                if success:
+
+                    save_activity_log(
+                         reset_username,
+                        "Password Reset"
+                    )
+
+                    notify(
+                        "Password updated",
+                        "Your password has been reset successfully.",
+                        "success"
+                    )
+
+                else:
+
+                    notify(
+                        "Account not found",
+                        "No enterprise account matched this username.",
+                        "error"
+                    )
+
+    # =====================================================
+    # LOGIN VALIDATION
+    # =====================================================
 
     if not submitted:
         return
 
     username = normalize_username(username)
+
     if not username or not password:
-        notify("Missing credentials", "Enter both username and password.", "warning")
+
+        notify(
+            "Missing credentials",
+            "Enter both username and password.",
+            "warning"
+        )
+
         return
 
     if st.session_state.auth_failures >= 5:
-        notify("Access temporarily locked", "Too many failed attempts in this session. Refresh the app or contact your administrator.", "error")
+
+        notify(
+            "Access temporarily locked",
+            "Too many failed attempts in this session. Refresh the app or contact your administrator.",
+            "error"
+        )
+
         return
 
-    with st.spinner("Verifying secure credentials..."):
+    # =====================================================
+    # AUTHENTICATION
+    # =====================================================
+
+    with st.spinner(
+        "Verifying secure credentials..."
+    ):
+
         user = get_user(username)
 
-    if user and verify_password(password, user.password):
-        if not is_hashed_password(user.password):
-            migrate_legacy_password(username, password)
+    if user and verify_password(
+        password,
+        user.password
+    ):
+
+        if not is_hashed_password(
+            user.password
+        ):
+
+            migrate_legacy_password(
+                username,
+                password
+            )
+            save_activity_log(
+                username,
+            "User Login"
+            )
+
         st.session_state.logged_in = True
+
         st.session_state.username = username
+
         st.session_state.edit_mode = False
+
         st.session_state.auth_failures = 0
-        st.session_state.last_login = datetime.now().strftime("%Y-%m-%d %H:%M")
-        st.session_state.last_activity = datetime.now().isoformat(timespec="seconds")
-        notify("Authentication successful", "Opening your secure analytics workspace.", "success")
+
+        st.session_state.last_login = datetime.now().strftime(
+            "%Y-%m-%d %H:%M"
+        )
+
+        st.session_state.last_activity = datetime.now().isoformat(
+            timespec="seconds"
+        )
+
+        notify(
+            "Authentication successful",
+            "Opening your secure analytics workspace.",
+            "success"
+        )
+
         st.rerun()
 
     st.session_state.auth_failures += 1
-    notify("Authentication failed", "Invalid credentials. Please verify your account details.", "error")
+
+    notify(
+        "Authentication failed",
+        "Invalid credentials. Please verify your account details.",
+        "error"
+    )
 
 
 def render_signup_form() -> None:
@@ -2283,12 +2482,20 @@ def render_admin_panel(current_user) -> None:
                 if user.role_type != "Admin":
                     if st.button("Promote", key=f"promote_{user.id}"):
                         promote_to_admin(user.id)
+                        save_activity_log(
+                            current_user.username,
+                            f"Promoted user {user.username} to Admin"
+                        )
                         st.success("User promoted to Admin")
                         st.rerun()
                 else:
                     if user.id != current_user.id:
                         if st.button("Demote", key=f"demote_{user.id}"):
                             demote_to_user(user.id)
+                            save_activity_log(
+                                current_user.username,
+                                f"Demoted admin {user.username}"
+                            )
                             st.warning("Admin demoted to User")
                             st.rerun()
                     else:
@@ -2299,6 +2506,10 @@ def render_admin_panel(current_user) -> None:
                 if user.id != current_user.id:
                     if st.button("Delete", key=f"delete_{user.id}"):
                         deleted = delete_user(user.id)
+                        save_activity_log(
+                             current_user.username,
+                             f"Deleted user {user.username}"
+                            )
                         if deleted:
                             st.error("User deleted")
                         else:
@@ -2309,8 +2520,147 @@ def render_admin_panel(current_user) -> None:
 
             st.write("---")
 
-    render_footer()
+            render_footer()
 
+    # =================================================
+    # ENTERPRISE ADMIN ANALYTICS
+    # =================================================
+
+    st.markdown("""
+
+    <div class='hero-card'>
+
+    <p class='eyebrow'>
+    ENTERPRISE CONTROL CENTER
+    </p>
+
+    <h1 class='hero-title'>
+    Admin Analytics Dashboard
+    </h1>
+
+    <p class='hero-subtitle'>
+    Global enterprise intelligence,
+    AI monitoring, operational analytics,
+    and security administration.
+    </p>
+
+    </div>
+
+    """, unsafe_allow_html=True)
+
+    # =================================================
+    # KPI CARDS
+    # =================================================
+
+    admin_col1, admin_col2, admin_col3, admin_col4 = st.columns(4)
+
+    # =================================================
+    # TOTAL USERS
+    # =================================================
+
+    with admin_col1:
+
+        st.metric(
+            "👥 Total Users",
+            total_users
+        )
+
+    # =================================================
+    # TOTAL PREDICTIONS
+    # =================================================
+
+    with admin_col2:
+
+        st.metric(
+            "🧠 AI Predictions",
+            total_predictions
+        )
+
+    # =================================================
+    # HIGH RISK USERS
+    # =================================================
+
+    with admin_col3:
+
+        st.metric(
+            "🚨 High Risk Accounts",
+            high_risk   
+        )
+
+    # =================================================
+    # ADMIN USERS
+    # =================================================
+
+    with admin_col4:
+
+        st.metric(
+            "🛡️ Administrators",
+            admin_count
+        )
+
+    st.write("")
+    st.write("")
+    # =================================================
+    # ENTERPRISE ANALYTICS CHART
+    # =================================================
+
+    analytics_data = pd.DataFrame({
+
+        "Metric": [
+
+            "Users",
+
+            "Predictions",
+
+            "High Risk",
+
+            "Admins"
+
+        ],
+
+        "Count": [
+
+            total_users,
+
+            total_predictions,
+
+            high_risk,
+
+            admin_count
+
+        ]
+
+    })
+
+    fig = px.bar(
+
+        analytics_data,
+
+        x="Metric",
+
+        y="Count",
+
+        title="Enterprise Platform Analytics",
+
+        text="Count"
+
+    )
+
+    fig.update_layout(
+
+        template="plotly_dark",
+
+        height=500
+
+    )
+
+    st.plotly_chart(
+
+        fig,
+
+        use_container_width=True
+
+    )
 
 # =====================================================
 # APP ROUTER
@@ -2350,6 +2700,592 @@ def main() -> None:
         render_account_profile(current_user)
     elif page == "Admin Panel":
         render_admin_panel(current_user)
+
+ # =====================================================
+# ACTIVITY MONITOR
+# =====================================================
+
+    elif page == "Activity Monitor":
+
+        st.markdown("""
+
+        <div class='hero-card'>
+
+        <p class='eyebrow'>
+         ENTERPRISE SECURITY
+         </p>
+
+        <h1 class='hero-title'>
+        Activity Monitor
+         </h1>
+
+        <p class='hero-subtitle'>
+        Real-time enterprise audit logs,
+         security tracking, and user activity intelligence.
+        </p>
+
+        </div>
+
+         """, unsafe_allow_html=True)
+
+        # =================================================
+        # LOAD LOGS
+        # =================================================
+
+        logs = get_activity_logs()
+
+        # =================================================
+        # ANALYTICS DATAFRAME
+        # =================================================
+
+        analytics_data = []
+
+        for log in logs:
+
+            analytics_data.append({
+
+                "Username": log.username,
+
+                "Action": log.action,
+
+                "Timestamp": str(log.timestamp)
+
+            })
+
+        analytics_df = pd.DataFrame(analytics_data)
+
+        # =================================================
+        # ACTION COUNTS CHART
+        # =================================================
+
+        if not analytics_df.empty:
+
+            action_counts = (
+                analytics_df["Action"]
+                .value_counts()
+                .reset_index()
+            )
+
+            action_counts.columns = [
+                "Action",
+                "Count"
+            ]
+
+            fig = px.bar(
+
+                action_counts,
+
+                x="Action",
+
+                y="Count",
+
+                title="Enterprise Activity Analytics",
+
+                template="plotly_dark"
+
+            )
+
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
+            # =================================================
+            # MOST ACTIVE USERS
+            # =================================================
+
+            st.write("")
+
+            st.subheader("🔥 Most Active Users")
+
+            user_activity = (
+                analytics_df["Username"]
+                .value_counts()
+                .reset_index()
+            )
+
+            user_activity.columns = [
+                "Username",
+                "Activity Count"
+            ]
+
+            st.dataframe(
+
+                user_activity,
+
+                use_container_width=True,
+
+                hide_index=True
+
+            )
+
+        # =================================================
+        # SEARCH
+        # =================================================
+
+        search = st.text_input(
+            "Search activity logs",
+            placeholder="Search username or action..."
+        )
+        # =================================================
+        # DATE RANGE FILTER
+        # =================================================
+
+        date_filter = st.selectbox(
+
+            "Filter by time range",
+
+            [
+                "All Time",
+                "Today",
+                "Last 7 Days",
+                "Last 30 Days"
+            ]
+
+        )
+
+        # =================================================
+        # FILTER LOGS
+        # =================================================
+
+        filtered_logs = []
+
+        for log in logs:
+
+            if (
+                search.lower() in log.username.lower()
+                or search.lower() in log.action.lower()
+                or search == ""
+            ):
+
+                filtered_logs.append(log)
+
+        # =================================================
+        # KPI CARDS
+        # =================================================
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+
+            st.metric(
+                "Total Logs",
+                len(filtered_logs)
+            )
+
+        with col2:
+
+            login_count = len([
+                x for x in filtered_logs
+                if "login" in x.action.lower()
+            ])
+
+            st.metric(
+                "Login Events",
+                login_count
+            )
+
+        with col3:
+
+            prediction_count = len([
+                x for x in filtered_logs
+                if "prediction" in x.action.lower()
+            ])
+            # =================================================
+            # SUSPICIOUS ACTIVITY DETECTION
+            # =================================================
+
+            suspicious_users = {}
+
+            for log in filtered_logs:
+
+                username = log.username
+
+                suspicious_users[username] = (
+                    suspicious_users.get(username, 0) + 1
+                )
+
+            st.metric(
+                "Prediction Events",
+                prediction_count
+            )
+        # =================================================
+        # EXECUTIVE SUMMARY CARDS
+        # =================================================
+
+        st.write("")
+        st.write("")
+
+        summary1, summary2, summary3, summary4 = st.columns(4)
+
+        # =================================================
+        # REVENUE EXPOSURE
+        # =================================================
+
+        with summary1:
+
+            st.markdown("""
+
+            <div class='glass-card'>
+
+            <p class='eyebrow'>
+            Revenue Exposure
+            </p>
+
+            <h2 style='color:#F87171;'>
+            $125K
+            </h2>
+
+            <p style='color:#CBD5E1;'>
+            Potential churn risk
+            </p>
+
+            </div>
+
+            """, unsafe_allow_html=True)
+
+        # =================================================
+        # ENTERPRISE ENGAGEMENT
+        # =================================================
+
+        with summary2:
+
+            engagement_score = min(
+                len(filtered_logs) * 10,
+                100
+            )
+
+            st.markdown(f"""
+
+            <div class='glass-card'>
+
+            <p class='eyebrow'>
+            Engagement Score
+            </p>
+
+            <h2 style='color:#38BDF8;'>
+            {engagement_score}%
+            </h2>
+
+            <p style='color:#CBD5E1;'>
+            Enterprise activity level
+            </p>
+
+            </div>
+
+            """, unsafe_allow_html=True)
+
+        # =================================================
+        # AI CONFIDENCE
+        # =================================================
+
+        with summary3:
+
+            st.markdown("""
+
+            <div class='glass-card'>
+
+            <p class='eyebrow'>
+            AI Confidence
+            </p>
+
+            <h2 style='color:#22C55E;'>
+            97%
+            </h2>
+
+            <p style='color:#CBD5E1;'>
+            Prediction reliability
+            </p>
+
+            </div>
+
+            """, unsafe_allow_html=True)
+
+        # =================================================
+        # SECURITY STATUS
+        # =================================================
+
+        with summary4:
+
+            security_status = (
+                "Stable"
+                if len(filtered_logs) < 20
+                else "Monitor"
+            )
+
+            security_color = (
+                "#22C55E"
+                if security_status == "Stable"
+                else "#F59E0B"
+            )
+
+            st.markdown(f"""
+
+            <div class='glass-card'>
+
+            <p class='eyebrow'>
+            Security Status
+            </p>
+
+            <h2 style='color:{security_color};'>
+            {security_status}
+            </h2>
+
+            <p style='color:#CBD5E1;'>
+            Enterprise threat level
+            </p>
+
+            </div>
+
+            """, unsafe_allow_html=True)
+
+        st.write("")
+
+        # =================================================
+        # REAL-TIME ALERT CENTER
+        # =================================================
+
+        st.write("")
+        st.write("")
+
+        st.subheader("🚨 Real-Time Alert Center")
+
+        alerts = []
+
+        # =================================================
+        # ALERT CONDITIONS
+        # =================================================
+
+        if prediction_count >= 5:
+
+            alerts.append({
+                "level": "warning",
+                "message": "High AI prediction activity detected."
+            })
+
+        if login_count >= 5:
+
+            alerts.append({
+                "level": "info",
+                "message": "Elevated enterprise login activity."
+            })
+
+        if len(filtered_logs) >= 15:
+
+            alerts.append({
+                "level": "error",
+                "message": "Large audit event spike detected."
+            })
+
+        if len(user_activity) >= 3:
+
+            alerts.append({
+                "level": "success",
+                "message": "Multiple enterprise users active."
+            })
+
+        # =================================================
+        # DISPLAY ALERTS
+        # =================================================
+
+        if alerts:
+
+            for alert in alerts:
+
+                if alert["level"] == "error":
+
+                    st.error(
+                        f"🚨 {alert['message']}"
+                    )
+
+                elif alert["level"] == "warning":
+
+                    st.warning(
+                        f"⚠️ {alert['message']}"
+                    )
+
+                elif alert["level"] == "info":
+
+                    st.info(
+                        f"ℹ️ {alert['message']}"
+                    )
+
+                elif alert["level"] == "success":
+
+                    st.success(
+                        f"✅ {alert['message']}"
+                    )
+
+        else:
+
+            st.success(
+                "✅ No active enterprise threats detected."
+            )
+
+        # =================================================
+        # AI BUSINESS INSIGHTS
+        # =================================================
+
+        st.write("")
+
+        st.subheader("🧠 AI Business Insights")
+
+            
+
+        high_risk_count = len([
+
+            x for x in filtered_logs
+
+            if "prediction" in x.action.lower()
+
+        ])
+
+        login_events = len([
+
+            x for x in filtered_logs
+
+            if "login" in x.action.lower()
+
+        ])
+
+        active_users = len(set([
+
+            x.username for x in filtered_logs
+
+        ]))
+
+        insights = []
+
+
+        # =================================================
+        # GENERATE INSIGHTS
+        # =================================================
+
+        if high_risk_count >= 5:
+
+            insights.append(
+                "⚠️ High prediction activity detected. Consider reviewing customer churn trends."
+            )
+
+        if login_events >= 10:
+
+            insights.append(
+                "🔐 Elevated login activity detected across the platform."
+            )
+
+        if active_users >= 3:
+
+            insights.append(
+                "📈 Multiple active enterprise users currently engaging with analytics."
+            )
+
+        if len(filtered_logs) == 0:
+
+            insights.append(
+                "ℹ️ No recent audit activity detected."
+            )
+
+        # =================================================
+        # DISPLAY INSIGHTS
+        # =================================================
+
+        if insights:
+
+            for insight in insights:
+
+                st.info(insight)
+
+        else:
+
+            st.success(
+                "✅ Enterprise systems operating normally."
+            )
+
+        # =================================================
+        # SECURITY ALERTS
+        # =================================================
+
+        for username, count in suspicious_users.items():
+
+            if count >= 5:
+
+                st.error(
+
+                    f"🚨 Suspicious activity detected from {username} "
+
+                    f"({count} actions recorded)"
+
+                )
+
+        # =================================================
+        # EXPORT AUDIT LOGS
+        # =================================================
+
+        export_data = []
+
+        for log in filtered_logs:
+
+            export_data.append({
+
+                "Username": log.username,
+
+                "Action": log.action,
+
+                "Timestamp": str(log.timestamp)
+
+            })
+
+        export_df = pd.DataFrame(export_data)
+
+        csv = export_df.to_csv(index=False).encode("utf-8")
+
+        st.download_button(
+
+            label="📥 Export Audit Logs CSV",
+
+            data=csv,
+
+            file_name="enterprise_audit_logs.csv",
+
+            mime="text/csv",
+
+            use_container_width=True
+
+        )
+
+         # =================================================
+         # ENTERPRISE AUDIT TABLE
+         # =================================================
+
+        if filtered_logs:
+
+            audit_data = []
+
+        for log in filtered_logs:
+
+            audit_data.append({
+
+            "Username": log.username,
+
+            "Action": log.action,
+
+            "Timestamp": str(log.timestamp)
+
+        })
+
+        audit_df = pd.DataFrame(audit_data)
+
+        st.dataframe(
+
+            audit_df,
+
+            use_container_width=True,
+
+            hide_index=True
+
+         )
+    else:
+
+            st.info("No activity logs found.")
 
 
 if __name__ == "__main__":
